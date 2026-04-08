@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-import psycopg
+import psycopg2
+from psycopg2.extras import execute_batch
 
 
 UPSERT_SQL = """
@@ -111,10 +112,6 @@ def get_market(bookmaker: dict[str, Any] | None, market_key: str) -> dict[str, A
 
 
 def extract_scores(event: dict[str, Any]) -> tuple[int | None, int | None]:
-    """
-    Your sample payload does not include scores, so these will usually be None.
-    This supports a couple of possible future shapes.
-    """
     home_score = to_int_or_none(event.get("home_score"))
     away_score = to_int_or_none(event.get("away_score"))
 
@@ -203,18 +200,14 @@ def build_rows_from_payload(payload: dict[str, Any] | list[dict[str, Any]]) -> l
     return rows
 
 
-def upsert_odds_json(
-    conn: psycopg.Connection,
-    payload: dict[str, Any] | list[dict[str, Any]],
-    commit: bool = True,
-) -> int:
+def upsert_odds_json(conn, payload: dict[str, Any] | list[dict[str, Any]], commit: bool = True) -> int:
     rows = build_rows_from_payload(payload)
 
     if not rows:
         return 0
 
     with conn.cursor() as cur:
-        cur.executemany(UPSERT_SQL, rows)
+        execute_batch(cur, UPSERT_SQL, rows, page_size=100)
 
     if commit:
         conn.commit()
